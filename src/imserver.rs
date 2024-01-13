@@ -57,7 +57,7 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                 // 为流生成新任务
                 tokio::spawn(async move {
                     eprintln!("Stream opened from {:?}", stream.connection().remote_addr());
-                    // 
+                    
                     while let Ok(Some(data)) = stream.receive().await {
                         eprintln!("Stream opened data    from {:?}", data);
                         match process_data(&data) {
@@ -106,7 +106,7 @@ fn process_data(data:&bytes::Bytes) -> Result<Option<Bytes>,DataGramError> {
 fn process_command_data(data:&bytes::Bytes) -> Result<Option<Bytes>,DataGramError> {
     let command = CommandDataGram::get_command_data_gram_by_u8(data);
     // 新建一个CommandDataGram
-    let mut vecu8 = CommandDataGram::create_gram_buf();
+    let mut vecu8 = CommandDataGram::create_gram_buf(0);
     let rescommand = CommandDataGram::create_command_gram_from_message_gram(vecu8.as_mut_slice(), command);
     eprintln!("Stream opened gram    from {:?}", rescommand);
     Result::Ok(Option::Some(Bytes::from(vecu8)))

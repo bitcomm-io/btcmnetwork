@@ -1,6 +1,7 @@
 pub mod imserver;
 pub mod imclient;
 pub mod exserver;
+pub mod clientmanager;
 // pub mod slowloris; 
 
 
