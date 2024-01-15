@@ -3,10 +3,15 @@
 
 use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram};
 use bytes::Bytes;
-use s2n_quic::Server;
+use s2n_quic::{Server, stream::BidirectionalStream};
 use tokio::io::AsyncWriteExt;
-use std::{error::Error, time::Duration};
-use crate::slowloris;
+use std::{error::Error, time::Duration, sync::Arc};
+// use tokio::sync::Mutex;
+use crate::{slowloris, connservice::ClientPoolManager};
+
+
+
+// use std::future::Future;
 // use crate::slowloris::MyConnectionSupervisor;
 /// 注意：此证书仅供演示目的使用！
 pub static CERT_PEM: &str = include_str!(concat!(
@@ -18,6 +23,7 @@ pub static KEY_PEM: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../certs/key.pem"
 ));
+
 
 pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
     // 限制任何握手尝试的持续时间为5秒
@@ -48,75 +54,109 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
         .with_io("0.0.0.0:4433")?
         .start()?;
 
+    // 创建多任务,可共享,可修改的ClientPoolManager
+    let cpm = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
+    // 等待客户端连接
     while let Some(mut connection) = server.accept().await {
-        // 为连接生成新任务
+        // 为连接生成新任务,在新任务中必须clone
+        let cpm = cpm.clone();
+        // 生成异步新的任务
         tokio::spawn(async move {
             eprintln!("Connection accepted from {:?}", connection.remote_addr());
-            
+            // 从连接中获取双向流
+            #[allow(unused_mut)]
             while let Ok(Some(mut stream)) = connection.accept_bidirectional_stream().await {
-                // 为流生成新任务
+                // 在这里获取stream id,后期不用lock获取
+                let stmid = stream.id();
+                // 组装共享器
+                let stm = Arc::new(tokio::sync::Mutex::new(stream));
+                // clone ClientPoolManager
+                let cpm = cpm.clone();
+                // 为流生成新异步新任务
                 tokio::spawn(async move {
-                    eprintln!("Stream opened from {:?}", stream.connection().remote_addr());
-                    
-                    while let Ok(Some(data)) = stream.receive().await {
-                        eprintln!("Stream opened data    from {:?}", data);
-                        match process_data(&data) {
-                            Ok(Some(datagram)) => {
-                                eprintln!("DataGram    from {:?}", datagram);
-                                stream.write_all(datagram.as_ref()).await.expect("stream should be open");
-                                // stream.send(datagram).await.expect("stream should be open");
-                                stream.flush().await.expect("stream should be open");
-                            }
-                            Ok(None) => {
-                                stream.send(data).await.expect("stream should be open");
-                            }
-                            Err(err) => {
-                                eprintln!("DataGramError = {:?}", err);
-                            }
-                        }
-                    }
+                    handle_service(stmid,cpm, stm).await;
                 });
             }
         });
     }
-
     Ok(())
 }
 
-fn process_data(data:&bytes::Bytes) -> Result<Option<Bytes>,DataGramError> {
+async fn handle_service(stmid    :u64,
+                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                        stm     :Arc<tokio::sync::Mutex<BidirectionalStream>>) {
+    let mut stream = stm.lock().await;
+    // let mut stream = wrp.0;
+    // 等待流中的数据
+    while let Ok(Some(data)) = stream.receive().await {
+        eprintln!("Stream opened data    from {:?}", data);
+        match process_data(&data,stmid, cpm.clone(),stm.clone()).await {
+            Ok(Some(datagram)) => {
+                eprintln!("DataGram    from {:?}", datagram);
+                stream.write_all(datagram.as_ref()).await.expect("stream should be open");
+                // stream.send(datagram).await.expect("stream should be open");
+                stream.flush().await.expect("stream should be open");
+            }
+            Ok(None) => {
+                stream.send(data).await.expect("stream should be open");
+            }
+            Err(err) => {
+                eprintln!("DataGramError = {:?}", err);
+            }
+        }
+    }
+}
+
+
+async fn process_data(data      :&bytes::Bytes,
+                        stmid   :u64,
+                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                        stream  :Arc<tokio::sync::Mutex<BidirectionalStream>>) 
+                        -> Result<Option<bytes::Bytes>,DataGramError> {
+
     let byte_array = data.as_ref();
+    // let stream = stream.lock().await;
     // 如果是命令报文
     if CommandDataGram::is_command_from_bytes(byte_array) {
-        process_command_data(data)
+        let rs = process_command_data(data,stmid,cpm,stream).await;
+        Result::Ok(rs)
     // 如果是消息报文
     } else if MessageDataGram::is_message_from_bytes(byte_array) {
-        process_message_data(data)
+        let rs = process_message_data(data,stmid,cpm,stream).await;
+        Result::Ok(rs)
     } else { // 如果两种报文都不是
         Result::Ok(Option::None)
     }
-    // let data_gram_head: & CommandDataGram = CommandDataGram::get_command_data_gram_by_bytes(data);
-    
-    // if data_gram_head.bitcomm() == CommandDataGram::BITCOMM_COMMAND {
-    //     let mut vec_u8: Vec<u8> = vec![0x00; CommandDataGram::get_size()];
-    //     Result::Ok(Option::Some(Bytes::from(vec_u8)))
-    // } else {
-    //     Result::Err(DataGramError{errcode:0xFF,details:"no data gram format!".to_string()})
-    // } 
 }
-fn process_command_data(data:&bytes::Bytes) -> Result<Option<Bytes>,DataGramError> {
+
+async fn process_command_data(data    :&bytes::Bytes,
+                        stmid   :u64,
+                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                        stream  :Arc<tokio::sync::Mutex<BidirectionalStream>>) 
+                        -> Option<bytes::Bytes> {
     let command = CommandDataGram::get_command_data_gram_by_u8(data);
     // 新建一个CommandDataGram
     let mut vecu8 = CommandDataGram::create_gram_buf(0);
     let rescommand = CommandDataGram::create_command_gram_from_message_gram(vecu8.as_mut_slice(), command);
+    let mut ccp = cpm.lock().await;
+    // let stream = stream.lock().await;
+    ccp.put_client(command.sender().into(), 0x0000, stmid);
+    ccp.put_stream(stmid, stream);
     eprintln!("Stream opened gram    from {:?}", rescommand);
-    Result::Ok(Option::Some(Bytes::from(vecu8)))
+    Option::Some(Bytes::from(vecu8))
 }
-fn process_message_data(data:&bytes::Bytes) -> Result<Option<Bytes>,DataGramError> {
+#[allow(unused_variables)]
+async fn process_message_data(data    :&bytes::Bytes,
+                        stmid   :u64,
+                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                        stream  :Arc<tokio::sync::Mutex<BidirectionalStream>>) 
+                        -> Option<bytes::Bytes> {
     let message = MessageDataGram::get_message_data_gram_by_u8(data);
         // 新建一个CommandDataGram
     let mut vecu8 = MessageDataGram::create_gram_buf(0);
     let resmessage = MessageDataGram::create_message_data_gram_from_mdg_u8(vecu8.as_mut_slice(), message);
     // 新建一个CommandDataGram
+    
     eprintln!("Stream opened gram    from {:?}", resmessage);
-    Result::Ok(Option::Some(Bytes::from(vecu8)))
+    Option::Some(Bytes::from(vecu8))
 }

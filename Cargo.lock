@@ -199,6 +199,7 @@ dependencies = [
  "btcmbase",
  "bytes",
  "getset",
+ "lazy_static",
  "s2n-quic",
  "tokio",
  "uuid",
