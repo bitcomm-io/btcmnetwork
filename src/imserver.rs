@@ -143,7 +143,7 @@ async fn process_command_data(data    :&bytes::Bytes,
     ccp.put_client(command.sender().into(), 0x0000, stmid);
     ccp.put_stream(stmid, stream);
     eprintln!("Stream opened gram    from {:?}", rescommand);
-    Option::Some(Bytes::from(vecu8))
+    Option::Some(Bytes::from(vecu8)) 
 }
 #[allow(unused_variables)]
 async fn process_message_data(data    :&bytes::Bytes,

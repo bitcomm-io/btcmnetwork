@@ -1,23 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
-
-// use btcmbase::client::ClientID;
-// use getset::{Getters,Setters};
 use s2n_quic::stream::BidirectionalStream;
-// use lazy_static::lazy_static;
-// use uuid::Uuid;
 
-
-
-// #[repr(C)] 
-// #[derive(Debug,Getters, Setters)]
-// pub struct ClientNetContext {
-//     #[getset(get = "pub")]
-//     sender      : u64,
-//     #[getset(get = "pub")]
-//     deviceid    : u64,
-//     #[getset(get = "pub")]
-//     streamid    : u64,
-// }
 
 #[derive(Debug)]
 pub struct ClientPoolManager {
