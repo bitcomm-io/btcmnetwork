@@ -186,6 +186,7 @@ name = "btcmbase"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.4.1",
+ "bytes",
  "getset",
  "rand 0.8.5",
  "serde",

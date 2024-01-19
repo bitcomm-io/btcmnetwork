@@ -1,14 +1,12 @@
 // 版权归亚马逊公司及其关联公司所有。保留所有权利。
 // SPDX-License-Identifier: Apache-2.0
 
-use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram, BitCommand, BitcommDataGram};
+use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram, BitCommand, InnerDataGram};
 use bytes::Bytes;
 #[allow(unused_imports)]
 use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
-use tokio::io::AsyncWriteExt;
-// use core::slice::SlicePattern;
-// use tokio::io::AsyncWriteExt;
-use std::{error::Error, time::Duration, sync::Arc};
+
+use std::{error::Error, time::Duration, sync::Arc, rc::Rc};
 // use tokio::sync::Mutex;
 use crate::{slowloris, connservice::ClientPoolManager,login, logout};
 
@@ -77,19 +75,21 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                 // 在这里获取stream id,后期不用lock获取
                 let stmid = send_stream.id();
                 // 组装共享器
-                let stm = Arc::new(send_stream);
+                let stm = Arc::new(tokio::sync::Mutex::new(send_stream));
                 // clone ClientPoolManager
                 let cpm = cpm.clone();
                 // 为流生成新异步新任务
                 tokio::spawn(async move {
-                    while let Ok(Some(data)) = receive_stream.receive().await {
-                        // 将获取到的数据解包,生成信令报文或是消息报文,
-                        let bitcomm_gram = handle_receive(data);
-                        process_receive(stmid,bitcomm_gram,cpm,stm);
-                        // 生成Response Gram
-                        // handle_receive(stmid,cpm.clone(),stm.clone());
-                        // receive_stream.connection().close(u32::from(0));
-                        break;
+                    // 获取收到数据的缓冲区
+                    while let Ok(Some(reqbuff)) = receive_stream.receive().await {
+                        // 将req,res两个数据区进行结构整理,形成内部报文结构
+                        if let Some(mut inner_data_gram) = handle_response_data_buffer(Rc::new(reqbuff)) {
+                            let rcdatagram = Rc::new(inner_data_gram);
+                            // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
+                            handle_receive(rcdatagram.clone());
+                            // 异步方式的处理
+                            process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).expect("error");                       
+                        }
                     }
                     
                 });
@@ -99,53 +99,71 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn process_receive<'a>(stmid   :u64,
-    data    :Option<BitcommDataGram>,
-    cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-    stm     :Arc<SendStream>) {
-    stm.write_all(data.unwrap().req_cmdu8().unwrap());
-}
+// fn malloc_response_data_buffer<'a>(reqbuff :&'a Bytes) -> Option<BytesMut> {
+//     if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
+//         let vec =CommandDataGram::create_gram_buf(0);
+//         Some(BytesMut::from(vec.as_slice()))
+//     } else if MessageDataGram::is_message_from_bytes(reqbuff.as_ref()) {
+//         let vec =MessageDataGram::create_gram_buf(0);
+//         Some(BytesMut::from(vec.as_slice()))    
+//     }else {
+//        None
+//     }
+// }
 
-fn handle_receive<'a>(data    :Bytes) ->Option<BitcommDataGram<'a>> {
-    let byte_array = data.as_ref();
-    // let stream = stream.lock().await;
+fn handle_response_data_buffer(reqbuff :Rc<Bytes>) -> Option<InnerDataGram> {
     // 如果是命令报文
-    if CommandDataGram::is_command_from_bytes(byte_array) {
-        handle_command_data(&data)
+    if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
+        let bts = reqbuff.as_ref();
+        let reqcmdgram = CommandDataGram::get_command_data_gram_by_u8(bts.as_ref());
+        let reqdata = InnerDataGram::Command {reqcmdbuff:reqbuff.clone(),reqcmdgram:Rc::new(*reqcmdgram)};
+        Some(reqdata)
     // 如果是消息报文
-    } else if MessageDataGram::is_message_from_bytes(byte_array) {
-        handle_message_data(&data)
+    } else if MessageDataGram::is_message_from_bytes(reqbuff.as_ref()) {
+        let reqmsggram = MessageDataGram::get_message_data_gram_by_u8(reqbuff.as_ref());
+        let reqdata = InnerDataGram::Message {reqmsgbuff:reqbuff.clone(),reqmsggram:Rc::new(*reqmsggram)};
+        Some(reqdata)
     } else { // 如果两种报文都不是
         Option::None
     }
 }
 
-fn handle_command_data<'a>(data:&Bytes) -> Option<BitcommDataGram<'a>> {
-    // 生成command消息体
-    let command = CommandDataGram::get_command_data_gram_by_u8(data);
+#[allow(unused_variables)]
+fn handle_receive(datagram:Rc<InnerDataGram>) {
+
+    match datagram.as_ref() {
+        InnerDataGram::Command{reqcmdbuff,reqcmdgram} => {
+            handle_command_data(reqcmdbuff,reqcmdgram);
+        }
+        InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
+            handle_message_data(reqmsgbuff, reqmsggram);
+        }
+    }
+}
+
+fn handle_command_data<'a>(reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>) {
     // 处理login命令
-    if command.command().contains(BitCommand::LOGIN_COMMAND) {
-        login::handle_command_login(data,command)    
-    } else if command.command().contains(BitCommand::LOGOUT_COMMAND) {
-        logout::handle_command_logout(data,command)  
-    } else {
-        Option::None
+    if reqcmdgram.command().contains(BitCommand::LOGIN_COMMAND) {
+        login::handle_command_login(reqcmdbuff,reqcmdgram)    
+    } else if reqcmdgram.command().contains(BitCommand::LOGOUT_COMMAND) {
+        logout::handle_command_logout(reqcmdbuff,reqcmdgram)  
     }
 }
 
 #[allow(unused_variables)]
-fn handle_message_data<'a>(data    :&bytes::Bytes) -> Option<BitcommDataGram<'a>> {
-    let message = MessageDataGram::get_message_data_gram_by_u8(data);
+fn handle_message_data(reqmsgbuff:&Rc<Bytes>,reqmsggram:&Rc<MessageDataGram>) {
+    // let message = MessageDataGram::get_message_data_gram_by_u8(reqdata);
         // 新建一个CommandDataGram
-    let mut vecu8 = MessageDataGram::create_gram_buf(0);
-    let resmessage = MessageDataGram::create_message_data_gram_from_mdg_u8(vecu8.as_mut_slice(), message);
+    // let mut vecu8 = MessageDataGram::create_gram_buf(0);
+    // let resmessage = MessageDataGram::create_message_data_gram_from_mdg_u8(vecu8.as_mut_slice(), message);
     // 新建一个CommandDataGram
-    
-    eprintln!("Stream opened gram    from {:?}", resmessage);
-    Option::Some(BitcommDataGram::new_message_data_gram(Option::Some(message), 
-                                                      Option::Some(data.as_ref()),
-                                                        Option::Some(resmessage),
-                                                      Option::Some(vecu8.as_slice()),))
+    // let dd = data.as_ref();
+    // eprintln!("Stream opened gram    from {:?}", resmessage);
+    // None
+    // Option::Some(BitcommDataGram::new_message_data_gram(Option::Some(message), 
+    //                                                   Option::Some(data),
+    //                                                     Option::Some(resmessage),
+    //                                                   Option::Some(vecu8)))
 }
 
 
@@ -155,89 +173,42 @@ fn handle_message_data<'a>(data    :&bytes::Bytes) -> Option<BitcommDataGram<'a>
 
 
 
+#[allow(unused_variables)]
+fn process_data<'a>(stmid   :u64,
+                          data    :Rc<InnerDataGram>,
+                          cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                          stm     :Arc<tokio::sync::Mutex<SendStream>>) -> Result<Rc<InnerDataGram>,DataGramError>{
+    // let stream = stream.lock().await;
+    match data.as_ref() {
+        InnerDataGram::Command { reqcmdbuff, reqcmdgram } => {
+            process_command_data(stmid,reqcmdbuff, reqcmdgram,cpm,stm);
+        }
+        InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
+            process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm);
+        }
+    }
+    Result::Ok(data)
+}
+
+
+fn process_command_data<'a>(stmid   :u64,
+                                reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>,
+                                cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                                stm     :Arc<tokio::sync::Mutex<SendStream>>) {
+    // 处理login命令
+    if reqcmdgram.command().contains(BitCommand::LOGIN_COMMAND) {
+        login::process_command_login(stmid,reqcmdbuff,reqcmdgram,cpm,stm);
+    } else if reqcmdgram.command().contains(BitCommand::LOGOUT_COMMAND) { // 处理登出logout
+        logout::process_command_logout(stmid,reqcmdbuff,reqcmdgram,cpm,stm) 
+    } 
+}
 
 
 
-
-fn handle_receive1(stmid   :u64,
-                        data    :Bytes,
+#[allow(unused_variables)]
+fn process_message_data<'a>(stmid   :u64,
+                        reqmsgbuff:&Rc<Bytes>,reqmsggram:&Rc<MessageDataGram>,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>) {
-    // let mut stream = stm.lock().await;
-    // let mut stream = wrp.0;
-    // 等待流中的数据
-    // while let Ok(Some(data)) = stream.receive().await {
-        eprintln!("Stream opened data    from {:?}", data);
-        match process_data(&data,stmid, cpm.clone(),stm.clone()) {
-            Ok(Some(datagram)) => {
-                eprintln!("DataGram    from {:?}", datagram);
-                // stream.write_all(datagram.as_ref()).await.expect("stream should be open");
-                // stream.send(datagram).await.expect("stream should be open");
-                // stream.flush().await.expect("stream should be open");
-            }
-            Ok(None) => {
-                // stream.send(data).await.expect("stream should be open");
-            }
-            Err(err) => {
-                eprintln!("DataGramError = {:?}", err);
-            }
-        }
-    // }
-}
 
-
-fn process_data(data      :&bytes::Bytes,
-                        stmid   :u64,
-                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                        stream  :Arc<tokio::sync::Mutex<SendStream>>) 
-                        -> Result<Option<bytes::Bytes>,DataGramError> {
-
-    let byte_array = data.as_ref();
-    // let stream = stream.lock().await;
-    // 如果是命令报文
-    if CommandDataGram::is_command_from_bytes(byte_array) {
-        let rs = process_command_data(data,stmid,cpm,stream).await;
-        Result::Ok(rs)
-    // 如果是消息报文
-    } else if MessageDataGram::is_message_from_bytes(byte_array) {
-        let rs = process_message_data(data,stmid,cpm,stream).await;
-        Result::Ok(rs)
-    } else { // 如果两种报文都不是
-        Result::Ok(Option::None)
-    }
-}
-
-fn process_command_data(data  :&bytes::Bytes,
-                            stmid   :u64,
-                            cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                            stream  :Arc<tokio::sync::Mutex<SendStream>>) 
-                        -> Option<bytes::Bytes> {
-    // 生成command消息体
-    let command = CommandDataGram::get_command_data_gram_by_u8(data);
-    // 处理login命令
-    if command.command().contains(BitCommand::LOGIN_COMMAND) {
-        login::process_command_login(command, stmid, cpm, stream)    
-    } else if command.command().contains(BitCommand::LOGOUT_COMMAND) {
-        logout::process_command_logout(command, stmid, cpm, stream)  
-    } else {
-        Option::None
-    }
-}
-
-
-
-#[allow(unused_variables)]
-fn process_message_data(data    :&bytes::Bytes,
-                        stmid   :u64,
-                        cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                        stream  :Arc<tokio::sync::Mutex<SendStream>>) 
-                        -> Option<bytes::Bytes> {
-    let message = MessageDataGram::get_message_data_gram_by_u8(data);
-        // 新建一个CommandDataGram
-    let mut vecu8 = MessageDataGram::create_gram_buf(0);
-    let resmessage = MessageDataGram::create_message_data_gram_from_mdg_u8(vecu8.as_mut_slice(), message);
-    // 新建一个CommandDataGram
-    
-    eprintln!("Stream opened gram    from {:?}", resmessage);
-    Option::Some(Bytes::from(vecu8))
 }
