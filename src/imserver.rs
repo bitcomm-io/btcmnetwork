@@ -7,7 +7,7 @@ use bytes::Bytes;
 use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
 use tokio::io::AsyncWriteExt;
 
-use std::{error::Error, time::Duration, sync::Arc, rc::Rc};
+use std::{error::Error, time::Duration, sync::Arc};
 // use tokio::sync::Mutex;
 use crate::{slowloris, connservice::ClientPoolManager,login, logout};
 
@@ -86,11 +86,11 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                         let rcreqbuff = Arc::new(reqbuff);
                         // 将req,res两个数据区进行结构整理,形成内部报文结构
                         if let Some(mut inner_data_gram) = handle_response_data_buffer(rcreqbuff.clone()) {
-                            let rcdatagram = Rc::new(inner_data_gram);
+                            let rcdatagram = Arc::new(inner_data_gram);
                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
                             handle_receive(rcdatagram.clone());
                             // 异步方式的处理
-                            process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).expect("error");                       
+                            process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).await.expect("process data error");                       
                         } else {
                             // let rcbuff = Rc::new(reqbuff);
                             let stm = stm.clone();
@@ -141,7 +141,7 @@ fn handle_response_data_buffer(reqbuff :Arc<Bytes>) -> Option<InnerDataGram> {
 }
 
 #[allow(unused_variables)]
-fn handle_receive(datagram:Rc<InnerDataGram>) {
+fn handle_receive(datagram:Arc<InnerDataGram>) {
 
     match datagram.as_ref() {
         InnerDataGram::Command{reqcmdbuff,reqcmdgram} => {
@@ -186,14 +186,14 @@ fn handle_message_data(reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>) 
 
 
 #[allow(unused_variables)]
-fn process_data<'a>(stmid   :u64,
-                          data    :Rc<InnerDataGram>,
+async fn process_data<'a>(stmid   :u64,
+                          data    :Arc<InnerDataGram>,
                           cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                          stm     :Arc<tokio::sync::Mutex<SendStream>>) -> Result<Rc<InnerDataGram>,DataGramError>{
+                          stm     :Arc<tokio::sync::Mutex<SendStream>>) -> Result<Arc<InnerDataGram>,DataGramError>{
     // let stream = stream.lock().await;
     match data.as_ref() {
         InnerDataGram::Command { reqcmdbuff, reqcmdgram } => {
-            process_command_data(stmid,reqcmdbuff, reqcmdgram,cpm,stm);
+            process_command_data(stmid,reqcmdbuff, reqcmdgram,cpm,stm).await;
         }
         InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
             process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm);
@@ -203,15 +203,15 @@ fn process_data<'a>(stmid   :u64,
 }
 
 
-fn process_command_data<'a>(stmid   :u64,
+async fn process_command_data<'a>(stmid   :u64,
                                 reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                 cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                                 stm     :Arc<tokio::sync::Mutex<SendStream>>) {
     // 处理login命令
     if reqcmdgram.command().contains(BitCommand::LOGIN_COMMAND) {
-        login::process_command_login(stmid,reqcmdbuff,reqcmdgram,cpm,stm);
+        login::process_command_login(stmid,reqcmdbuff,reqcmdgram,cpm,stm).await;
     } else if reqcmdgram.command().contains(BitCommand::LOGOUT_COMMAND) { // 处理登出logout
-        logout::process_command_logout(stmid,reqcmdbuff,reqcmdgram,cpm,stm) 
+        logout::process_command_logout(stmid,reqcmdbuff,reqcmdgram,cpm,stm).await; 
     } 
 }
 

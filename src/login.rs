@@ -22,14 +22,14 @@ pub fn handle_command_login(reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGr
 }
 
 #[allow(unused_variables)]
-pub fn process_command_login<'a>(stmid   :u64,
+pub async fn process_command_login<'a>(stmid   :u64,
                                       reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                       cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                                       stm     :Arc<tokio::sync::Mutex<SendStream>>) {
     // let command = data.req_cmdgram.unwrap();
     // 此方法中需要对 token 进行验证
     eprintln!("client login server {:?}", reqcmdgram);   
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
+    // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
         // 缓存client的信息
         ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stmid);
@@ -45,5 +45,5 @@ pub fn process_command_login<'a>(stmid   :u64,
         stream.write_all(u8array).await.expect("stream should be open");
         // stream.write_all(u8array).await.expect("stream should be open");
         stream.flush().await.expect("stream should be open");
-    })
+    // })
   }

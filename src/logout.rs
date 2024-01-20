@@ -20,26 +20,28 @@ pub fn handle_command_logout(reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataG
 }
 
 #[allow(unused_variables)]
-pub fn process_command_logout<'a>(stmid   :u64,
+pub async fn process_command_logout<'a>(stmid   :u64,
                                   reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                   cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                                   stm     :Arc<tokio::sync::Mutex<SendStream>>) {
-      // let command = data.req_cmdgram.unwrap();
-      // 此方法中需要对 token 进行验证
-      eprintln!("client login server {:?}", reqcmdgram);   
-      // 
-      tokio::runtime::Runtime::new().unwrap().block_on(async {
+    // let command = data.req_cmdgram.unwrap();
+    // 此方法中需要对 token 进行验证
+    eprintln!("client login server {:?}", reqcmdgram);   
+    // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
         // 缓存client的信息
-        ccp.remove_client(reqcmdgram.sender().into(), reqcmdgram.deviceid());
-        ccp.remove_stream(stmid);
+        ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stmid);
+        // 必须clone
+        ccp.put_stream(stmid, stm.clone());
 
-        let stream = stm.lock().await;
+        let mut vecu8 = CommandDataGram::create_gram_buf(0);
+        let cdg = CommandDataGram::create_command_gram_from_gram(vecu8.as_mut(), reqcmdgram.as_ref());
+
+        let mut stream = stm.lock().await;
         // let mut bts = rescmdbuff.as_ref();
-        // let u8array = bts.as_mut();
-        // // rescmdgram.set_bitcomm(BitcommFlag::BITCOMM_COMMAND);
-        // // stream.write_all()
+        let u8array = vecu8.as_mut();
+        stream.write_all(u8array).await.expect("stream should be open");
         // stream.write_all(u8array).await.expect("stream should be open");
-        // stream.flush().await.expect("stream should be open");
-    })
+        stream.flush().await.expect("stream should be open");
+    // })
 } 
