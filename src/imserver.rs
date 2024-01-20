@@ -5,6 +5,7 @@ use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram, BitCom
 use bytes::Bytes;
 #[allow(unused_imports)]
 use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
+use tokio::io::AsyncWriteExt;
 
 use std::{error::Error, time::Duration, sync::Arc, rc::Rc};
 // use tokio::sync::Mutex;
@@ -82,13 +83,24 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                 tokio::spawn(async move {
                     // 获取收到数据的缓冲区
                     while let Ok(Some(reqbuff)) = receive_stream.receive().await {
+                        let rcreqbuff = Arc::new(reqbuff);
                         // 将req,res两个数据区进行结构整理,形成内部报文结构
-                        if let Some(mut inner_data_gram) = handle_response_data_buffer(Rc::new(reqbuff)) {
+                        if let Some(mut inner_data_gram) = handle_response_data_buffer(rcreqbuff.clone()) {
                             let rcdatagram = Rc::new(inner_data_gram);
                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
                             handle_receive(rcdatagram.clone());
                             // 异步方式的处理
                             process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).expect("error");                       
+                        } else {
+                            // let rcbuff = Rc::new(reqbuff);
+                            let stm = stm.clone();
+                            let rb = rcreqbuff.as_ref();
+                            let vecu8 = rb.to_vec();
+                            let mut u8array = vecu8.as_slice();
+                            
+                            let mut send_stream = stm.lock().await;
+                            send_stream.write_all(u8array).await.expect("stream should be open;");
+                            send_stream.flush().await.expect("stream should be open");
                         }
                     }
                     
@@ -111,17 +123,17 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
 //     }
 // }
 
-fn handle_response_data_buffer(reqbuff :Rc<Bytes>) -> Option<InnerDataGram> {
+fn handle_response_data_buffer(reqbuff :Arc<Bytes>) -> Option<InnerDataGram> {
     // 如果是命令报文
     if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
         let bts = reqbuff.as_ref();
         let reqcmdgram = CommandDataGram::get_command_data_gram_by_u8(bts.as_ref());
-        let reqdata = InnerDataGram::Command {reqcmdbuff:reqbuff.clone(),reqcmdgram:Rc::new(*reqcmdgram)};
+        let reqdata = InnerDataGram::Command {reqcmdbuff:reqbuff.clone(),reqcmdgram:Arc::new(*reqcmdgram)};
         Some(reqdata)
     // 如果是消息报文
     } else if MessageDataGram::is_message_from_bytes(reqbuff.as_ref()) {
         let reqmsggram = MessageDataGram::get_message_data_gram_by_u8(reqbuff.as_ref());
-        let reqdata = InnerDataGram::Message {reqmsgbuff:reqbuff.clone(),reqmsggram:Rc::new(*reqmsggram)};
+        let reqdata = InnerDataGram::Message {reqmsgbuff:reqbuff.clone(),reqmsggram:Arc::new(*reqmsggram)};
         Some(reqdata)
     } else { // 如果两种报文都不是
         Option::None
@@ -141,7 +153,7 @@ fn handle_receive(datagram:Rc<InnerDataGram>) {
     }
 }
 
-fn handle_command_data<'a>(reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>) {
+fn handle_command_data<'a>(reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>) {
     // 处理login命令
     if reqcmdgram.command().contains(BitCommand::LOGIN_COMMAND) {
         login::handle_command_login(reqcmdbuff,reqcmdgram)    
@@ -151,7 +163,7 @@ fn handle_command_data<'a>(reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>
 }
 
 #[allow(unused_variables)]
-fn handle_message_data(reqmsgbuff:&Rc<Bytes>,reqmsggram:&Rc<MessageDataGram>) {
+fn handle_message_data(reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>) {
     // let message = MessageDataGram::get_message_data_gram_by_u8(reqdata);
         // 新建一个CommandDataGram
     // let mut vecu8 = MessageDataGram::create_gram_buf(0);
@@ -192,7 +204,7 @@ fn process_data<'a>(stmid   :u64,
 
 
 fn process_command_data<'a>(stmid   :u64,
-                                reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>,
+                                reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                 cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                                 stm     :Arc<tokio::sync::Mutex<SendStream>>) {
     // 处理login命令
@@ -207,7 +219,7 @@ fn process_command_data<'a>(stmid   :u64,
 
 #[allow(unused_variables)]
 fn process_message_data<'a>(stmid   :u64,
-                        reqmsgbuff:&Rc<Bytes>,reqmsggram:&Rc<MessageDataGram>,
+                        reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>) {
 

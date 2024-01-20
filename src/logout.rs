@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use std::{sync::Arc, rc::Rc};
 
 use btcmbase::datagram::CommandDataGram;
@@ -8,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::connservice::ClientPoolManager;
 #[allow(unused_variables)]
-pub fn handle_command_logout(reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>) {
+pub fn handle_command_logout(reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>) {
 // let mut ve = res.res_cmdu8.as_ref().unwrap();
 // let rescommand = CommandDataGram::create_command_gram_from_message_gram(ve.as_mut_slice(), command);
 
@@ -20,7 +21,7 @@ pub fn handle_command_logout(reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGra
 
 #[allow(unused_variables)]
 pub fn process_command_logout<'a>(stmid   :u64,
-                                  reqcmdbuff:&Rc<Bytes>,reqcmdgram:&Rc<CommandDataGram>,
+                                  reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                   cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                                   stm     :Arc<tokio::sync::Mutex<SendStream>>) {
       // let command = data.req_cmdgram.unwrap();
