@@ -5,7 +5,7 @@ use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram, BitCom
 use bytes::Bytes;
 #[allow(unused_imports)]
 use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
-use tokio::io::AsyncWriteExt;
+// use tokio::io::AsyncWriteExt;
 
 use std::{error::Error, time::Duration, sync::Arc};
 // use tokio::sync::Mutex;
@@ -85,22 +85,15 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                     while let Ok(Some(reqbuff)) = receive_stream.receive().await {
                         let rcreqbuff = Arc::new(reqbuff);
                         // 将req,res两个数据区进行结构整理,形成内部报文结构
-                        if let Some(mut inner_data_gram) = handle_response_data_buffer(rcreqbuff.clone()) {
+                        if let Some(mut inner_data_gram) = prepare_data_buffer(rcreqbuff.clone()) {
                             let rcdatagram = Arc::new(inner_data_gram);
                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
                             handle_receive(rcdatagram.clone());
                             // 异步方式的处理
                             process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).await.expect("process data error");                       
                         } else {
-                            // let rcbuff = Rc::new(reqbuff);
-                            let stm = stm.clone();
-                            let rb = rcreqbuff.as_ref();
-                            let vecu8 = rb.to_vec();
-                            let mut u8array = vecu8.as_slice();
-                            
                             let mut send_stream = stm.lock().await;
-                            send_stream.write_all(u8array).await.expect("stream should be open;");
-                            send_stream.flush().await.expect("stream should be open");
+                            send_stream.send(Arc::try_unwrap(rcreqbuff).unwrap()).await.expect("");
                         }
                     }
                     
@@ -111,19 +104,7 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// fn malloc_response_data_buffer<'a>(reqbuff :&'a Bytes) -> Option<BytesMut> {
-//     if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
-//         let vec =CommandDataGram::create_gram_buf(0);
-//         Some(BytesMut::from(vec.as_slice()))
-//     } else if MessageDataGram::is_message_from_bytes(reqbuff.as_ref()) {
-//         let vec =MessageDataGram::create_gram_buf(0);
-//         Some(BytesMut::from(vec.as_slice()))    
-//     }else {
-//        None
-//     }
-// }
-
-fn handle_response_data_buffer(reqbuff :Arc<Bytes>) -> Option<InnerDataGram> {
+fn prepare_data_buffer(reqbuff :Arc<Bytes>) -> Option<InnerDataGram> {
     // 如果是命令报文
     if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
         let bts = reqbuff.as_ref();
