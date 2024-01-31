@@ -55,30 +55,30 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
         // .with_io("127.0.0.1:4433")?
         .with_io("0.0.0.0:4433")?
         .start()?;
-    #[allow(unused_variables)]
-    let cpmm = ClientPoolManager::new();
+    // #[allow(unused_variables)]
+    // let cpmm = ClientPoolManager::new();
     // 创建多任务,可共享,可修改的ClientPoolManager
-    #[allow(unused_variables)]
-    let cpm = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
+    // #[allow(unused_variables)]
+    let cpm0 = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
     // 等待客户端连接
     while let Some(mut connection) = server.accept().await {
         #[allow(unused_variables)]
         // 为连接生成新任务,在新任务中必须clone
-        let cpm = cpm.clone();
+        let cpm1 = cpm0.clone();
         // 生成异步新的任务
         tokio::spawn(async move {
             eprintln!("Connection accepted from {:?}", connection.remote_addr());
             // 从连接中获取双向流
             #[allow(unused_mut)]
-            #[allow(unused_variables)]
+            // #[allow(unused_variables)]
             while let Ok(Some(mut stream)) = connection.accept_bidirectional_stream().await {
                 let (mut receive_stream, mut send_stream) = stream.split();
                 // 在这里获取stream id,后期不用lock获取
                 let stmid = send_stream.id();
                 // 组装共享器
-                let stm = Arc::new(tokio::sync::Mutex::new(send_stream));
+                let stm0 = Arc::new(tokio::sync::Mutex::new(send_stream));
                 // clone ClientPoolManager
-                let cpm = cpm.clone();
+                let cpm2 = cpm1.clone();
                 // 为流生成新异步新任务
                 tokio::spawn(async move {
                     // 获取收到数据的缓冲区
@@ -90,9 +90,9 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
                             handle_receive(rcdatagram.clone());
                             // 异步方式的处理
-                            process_data(stmid,rcdatagram.clone(),cpm.clone(),stm.clone()).await.expect("process data error");                       
+                            process_data(stmid,rcdatagram.clone(),cpm2.clone(),stm0.clone()).await.expect("process data error");                       
                         } else {
-                            let mut send_stream = stm.lock().await;
+                            let mut send_stream = stm0.lock().await;
                             send_stream.send(Arc::try_unwrap(rcreqbuff).unwrap()).await.expect("");
                         }
                     }
