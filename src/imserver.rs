@@ -93,8 +93,8 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                             process_data(stmid,rcdatagram.clone(),cpm2.clone(),stm0.clone()).await.expect("process data error");                       
                         } else {
                             let mut send_stream = stm0.lock().await;
-                            eprintln!("client host from {:?}", send_stream.connection().remote_addr());
-                            eprintln!("client host from {:?}", rcreqbuff.as_ref());
+                            eprint!("client host from {:?}", send_stream.connection().remote_addr());
+                            eprintln!("  data is  {:?}", rcreqbuff.as_ref());
                             send_stream.send(Arc::try_unwrap(rcreqbuff).unwrap()).await.expect("");
                         }
                     }
