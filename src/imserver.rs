@@ -27,7 +27,7 @@ pub static KEY_PEM: &str = include_str!(concat!(
 ));
 
 
-pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
+pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPoolManager>>) -> Result<(), Box<dyn Error>> {
     // 限制任何握手尝试的持续时间为5秒
     // 默认情况下，握手的限制时间为10秒。
     let connection_limits = s2n_quic::provider::limits::Limits::new()
@@ -53,13 +53,13 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
         ))?
         .with_tls((CERT_PEM, KEY_PEM))?
         // .with_io("127.0.0.1:4433")?
-        .with_io("0.0.0.0:4433")?
+        .with_io("0.0.0.0:9563")?
         .start()?;
     // #[allow(unused_variables)]
     // let cpmm = ClientPoolManager::new();
     // 创建多任务,可共享,可修改的ClientPoolManager
     // #[allow(unused_variables)]
-    let cpm0 = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
+    // let cpm0 = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
     // 等待客户端连接
     while let Some(mut connection) = server.accept().await {
         #[allow(unused_variables)]
