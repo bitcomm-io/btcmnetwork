@@ -55,6 +55,7 @@ pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPool
         // .with_io("127.0.0.1:4433")?
         .with_io("0.0.0.0:9563")?
         .start()?;
+    println!("quic listening on {}", server.local_addr().unwrap());
     // #[allow(unused_variables)]
     // let cpmm = ClientPoolManager::new();
     // 创建多任务,可共享,可修改的ClientPoolManager
