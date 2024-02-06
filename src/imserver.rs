@@ -206,5 +206,6 @@ fn process_message_data<'a>(stmid   :u64,
                         reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>) {
-
+    eprintln!("client send message buf  to server {:?}", reqmsgbuff);  
+    eprintln!("client send message gram to server {:?}", reqmsggram);  
 }
