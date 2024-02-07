@@ -27,19 +27,23 @@ pub async fn send_message_to_client<'a>(stmid   :u64,
         // let u8array = vecu8.as_mut();
         stream.write_all(vecu8.as_mut()).await.expect("stream should be open");
         stream.flush().await.expect("stream should be open");
-
+        let sender = reqmsggram.sender();
+        let receiver = reqmsggram.receiver();
+        let deviceid = reqmsggram.deviceid();
+        
     //转发给接收者的不同设备
         let ccp = cpm.lock().await;
         // 如何能够获取hash
-        if let Some(devhash) = ccp.get_client(reqmsggram.receiver().into()) {
+        if let Some(devhash) = ccp.get_client(receiver.into()) {
             // 循环处理每一个键值对(每一个设备，对应一个连接)
             for (key, value) in devhash.iter() {
-                println!("Key: {}, Value: {}", key, value);
-                if let Some(ostm) = ccp.get_stream(*value) {
-                    let mut ostream = ostm.lock().await;
-                    // let byte_slice_ref: &[u8] = reqmsgbuff;
-                    // let ref = reqmsgbuff.bytes();
-                    // ostream.send(reqmsgbuff.bytes());
+                // println!("Key: {}, Value: {}", key, value);
+                // 如果指向同一个流
+                if Arc::ptr_eq(&stm, value) {
+                    stream.write_all(reqmsgbuff).await.expect("send to error!");
+                    stream.flush().await.expect("flush error");   
+                } else {
+                    let mut ostream = value.lock().await;
                     ostream.write_all(reqmsgbuff).await.expect("send to error!");
                     ostream.flush().await.expect("flush error");
                 }

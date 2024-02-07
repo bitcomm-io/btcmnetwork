@@ -32,9 +32,9 @@ pub async fn process_command_login<'a>(stmid   :u64,
     // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
         // 缓存client的信息
-        ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stmid);
+        ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stm.clone());
         // 必须clone
-        ccp.put_stream(stmid, stm.clone());
+        // ccp.put_stream(stmid, stm.clone());
 
         let mut vecu8 = CommandDataGram::create_gram_buf(0);
         let cdg = CommandDataGram::create_command_gram_from_gram(vecu8.as_mut(), reqcmdgram.as_ref());
