@@ -9,7 +9,7 @@ use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
 
 use std::{error::Error, time::Duration, sync::Arc};
 // use tokio::sync::Mutex;
-use crate::{slowloris, connservice::ClientPoolManager,login, logout};
+use crate::{connservice::ClientPoolManager, login, logout, message, slowloris};
 
 
 
@@ -180,7 +180,7 @@ async fn process_data<'a>(stmid   :u64,
             process_command_data(stmid,reqcmdbuff, reqcmdgram,cpm,stm).await;
         }
         InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
-            process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm);
+            process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm).await;
         }
     }
     Result::Ok(data)
@@ -202,10 +202,11 @@ async fn process_command_data<'a>(stmid   :u64,
 
 
 #[allow(unused_variables)]
-fn process_message_data<'a>(stmid   :u64,
+async fn process_message_data<'a>(stmid   :u64,
                         reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>) {
-    eprintln!("client send message buf  to server {:?}", reqmsgbuff);  
-    eprintln!("client send message gram to server {:?}", reqmsggram);  
+    message::send_message_to_client(stmid, reqmsgbuff, reqmsggram, cpm, stm).await;
+    // eprintln!("client send message buf  to server {:?}", reqmsgbuff); 
+    // eprintln!("client send message gram to server {:?}", reqmsggram); 
 }
