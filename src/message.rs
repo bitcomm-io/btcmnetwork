@@ -24,8 +24,8 @@ pub async fn send_message_to_client<'a>(stmid   :u64,
         let cdg = CommandDataGram::create_command_gram_from_message_gram(vecu8.as_mut(), reqmsggram.as_ref());
         let mut stream = stm.lock().await;
         // let mut bts = rescmdbuff.as_ref();
-        let u8array = vecu8.as_mut();
-        stream.write_all(u8array).await.expect("stream should be open");
+        // let u8array = vecu8.as_mut();
+        stream.write_all(vecu8.as_mut()).await.expect("stream should be open");
         stream.flush().await.expect("stream should be open");
 
     //转发给接收者的不同设备
@@ -37,7 +37,10 @@ pub async fn send_message_to_client<'a>(stmid   :u64,
                 println!("Key: {}, Value: {}", key, value);
                 if let Some(ostm) = ccp.get_stream(*value) {
                     let mut ostream = ostm.lock().await;
-                    ostream.write(reqmsgbuff.as_ref()).await.expect("send to error!");
+                    // let byte_slice_ref: &[u8] = reqmsgbuff;
+                    // let ref = reqmsgbuff.bytes();
+                    // ostream.send(reqmsgbuff.bytes());
+                    ostream.write_all(reqmsgbuff).await.expect("send to error!");
                     ostream.flush().await.expect("flush error");
                 }
             }
