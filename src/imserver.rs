@@ -5,11 +5,11 @@ use btcmbase::datagram::{CommandDataGram, DataGramError, MessageDataGram, BitCom
 use bytes::Bytes;
 #[allow(unused_imports)]
 use s2n_quic::{Server, stream::{BidirectionalStream, SendStream}};
-// use tokio::io::AsyncWriteExt;
+use tokio::sync::{mpsc::Sender, Mutex};
 
 use std::{error::Error, time::Duration, sync::Arc};
 // use tokio::sync::Mutex;
-use crate::{connservice::ClientPoolManager, login, logout, message, slowloris};
+use crate::{connservice::ClientPoolManager, eventqueue::MessageEvent, login, logout, send, slowloris};
 
 
 
@@ -27,7 +27,9 @@ pub static KEY_PEM: &str = include_str!(concat!(
 ));
 
 
-pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPoolManager>>) -> Result<(), Box<dyn Error>> {
+pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPoolManager>>,
+                                          meqsend0:Arc<Mutex<Sender<MessageEvent>>>) 
+                                          -> Result<(), Box<dyn Error>> {
     // 限制任何握手尝试的持续时间为5秒
     // 默认情况下，握手的限制时间为10秒。
     let connection_limits = s2n_quic::provider::limits::Limits::new()
@@ -66,6 +68,7 @@ pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPool
         #[allow(unused_variables)]
         // 为连接生成新任务,在新任务中必须clone
         let cpm1 = cpm0.clone();
+        let meqsend1 = meqsend0.clone();
         // 生成异步新的任务
         tokio::spawn(async move {
             eprintln!("Connection accepted from {:?}", connection.remote_addr());
@@ -80,6 +83,7 @@ pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPool
                 let stm0 = Arc::new(tokio::sync::Mutex::new(send_stream));
                 // clone ClientPoolManager
                 let cpm2 = cpm1.clone();
+                let meqsend2   = meqsend1.clone();
                 // 为流生成新异步新任务
                 tokio::spawn(async move {
                     // 获取收到数据的缓冲区
@@ -91,7 +95,7 @@ pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPool
                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
                             handle_receive(rcdatagram.clone());
                             // 异步方式的处理
-                            process_data(stmid,rcdatagram.clone(),cpm2.clone(),stm0.clone()).await.expect("process data error");                       
+                            process_data(stmid,rcdatagram.clone(),cpm2.clone(),stm0.clone(),meqsend2.clone()).await.expect("process data error");                       
                         } else {
                             let mut send_stream = stm0.lock().await;
                             eprint!("client host from {:?}", send_stream.connection().remote_addr());
@@ -173,14 +177,15 @@ fn handle_message_data(reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>) 
 async fn process_data<'a>(stmid   :u64,
                           data    :Arc<InnerDataGram>,
                           cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                          stm     :Arc<tokio::sync::Mutex<SendStream>>) -> Result<Arc<InnerDataGram>,DataGramError>{
+                          stm     :Arc<tokio::sync::Mutex<SendStream>>,
+                          meqsend :Arc<Mutex<Sender<MessageEvent>>>) -> Result<Arc<InnerDataGram>,DataGramError>{
     // let stream = stream.lock().await;
     match data.as_ref() {
         InnerDataGram::Command { reqcmdbuff, reqcmdgram } => {
             process_command_data(stmid,reqcmdbuff, reqcmdgram,cpm,stm).await;
         }
         InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
-            process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm).await;
+            process_message_data(stmid,reqmsgbuff, reqmsggram,cpm,stm,meqsend).await;
         }
     }
     Result::Ok(data)
@@ -205,8 +210,13 @@ async fn process_command_data<'a>(stmid   :u64,
 async fn process_message_data<'a>(stmid   :u64,
                         reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
-                        stm     :Arc<tokio::sync::Mutex<SendStream>>) {
-    message::send_message_to_client(stmid, reqmsgbuff, reqmsggram, cpm, stm).await;
+                        stm     :Arc<tokio::sync::Mutex<SendStream>>,
+                        meqsend :Arc<Mutex<Sender<MessageEvent>>>) {
+    let cpm1 = cpm.clone();
+    let stm1 = stm.clone();
+    let meqsend1 = meqsend.clone();
+    send::send_message_to_return(stmid, reqmsgbuff, reqmsggram, cpm, stm).await;
+    send::send_message_to_queue( reqmsgbuff, reqmsggram, meqsend1).await;
     // eprintln!("client send message buf  to server {:?}", reqmsgbuff); 
     // eprintln!("client send message gram to server {:?}", reqmsggram); 
 }

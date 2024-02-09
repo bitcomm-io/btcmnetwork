@@ -7,13 +7,16 @@ pub struct ClientPoolManager {
     ///
     client_pool : HashMap<u64,HashMap<u32,Arc<tokio::sync::Mutex<SendStream>>>>, // clientid,deviceid,streamid
     // 
+    // message_queue :VecDeque<Bytes>,
     // stream_pool : HashMap<u64,Arc<tokio::sync::Mutex<SendStream>>>, // streamid,stream
 }
 
 impl ClientPoolManager {
 
     pub fn new() -> Self {
-        ClientPoolManager { client_pool : HashMap::new(),}//stream_pool : HashMap::new(), }
+        ClientPoolManager { client_pool   : HashMap::new(),
+                            // message_queue : VecDeque::new(), 
+                          }
     }
 
     // pub fn get_stream(&self,stream_id:u64) -> Option<&Arc<tokio::sync::Mutex<SendStream>>> {
