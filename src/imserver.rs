@@ -65,6 +65,7 @@ pub async fn start_instant_message_server(cpm0:Arc<tokio::sync::Mutex<ClientPool
     // let cpm0 = Arc::new(tokio::sync::Mutex::new(ClientPoolManager::new()));
     // 等待客户端连接
     while let Some(mut connection) = server.accept().await {
+        // 设置不超时
         connection.keep_alive(true)?;
         #[allow(unused_variables)]
         // 为连接生成新任务,在新任务中必须clone
