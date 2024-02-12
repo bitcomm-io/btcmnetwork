@@ -214,11 +214,8 @@ async fn process_message_data<'a>(stmid   :u64,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>,
                         meqsend :Arc<Mutex<Sender<MessageEvent>>>) {
-    let cpm1 = cpm.clone();
-    let stm1 = stm.clone();
-    let meqsend1 = meqsend.clone();
-    send::send_message_to_return(stmid, reqmsgbuff, reqmsggram, cpm, stm).await;
-    send::send_message_to_queue( reqmsgbuff, reqmsggram, meqsend1).await;
-    // eprintln!("client send message buf  to server {:?}", reqmsgbuff); 
-    // eprintln!("client send message gram to server {:?}", reqmsggram); 
+
+    send::send_message(stmid, reqmsgbuff, reqmsggram, cpm, stm,meqsend).await;
+
 }
+

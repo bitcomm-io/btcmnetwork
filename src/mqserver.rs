@@ -29,14 +29,17 @@ pub async fn start_message_evnet_queue_server(cpm:Arc<tokio::sync::Mutex<ClientP
                 let deviceid = reqmsggram.deviceid();
                 let ccp = cpm.lock().await;
                 // 如何能够获取hash
-                if let Some(devhash) = ccp.get_client(receiver.into()) {
+                if let Some(devvec) = ccp.get_device_pool(receiver.into()) {
                     // 循环处理每一个键值对(每一个设备，对应一个连接)
-                    for (key, value) in devhash.iter() {
+                    for &deviceid in devvec {
                         // println!("Key: {}, Value: {}", key, value);
+                        let value = ccp.get_client(receiver.into(), deviceid).unwrap();
                         let mut stream = value.lock().await;
                         stream.write_all(&reqmsgbuff).await.expect("send to error!");
                         stream.flush().await.expect("flush error");
                     }
+                } else { // 如果获取不到,说明不是登录的同一个服务器,或是处在离线状态,则需要通过nats进行消息传递
+
                 }
             }
         }

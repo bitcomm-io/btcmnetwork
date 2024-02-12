@@ -29,21 +29,27 @@ pub async fn process_command_logout<'a>(stmid   :u64,
     eprintln!("client logout server {:?}", reqcmdgram);   
     // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
-        // 缓存client的信息
-        ccp.remove_client(reqcmdgram.sender().into(), reqcmdgram.deviceid());
-        // ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stmid);
-        // 必须clone
-        // ccp.put_stream(stmid, stm.clone());
 
         let mut vecu8 = CommandDataGram::create_gram_buf(0);
         let cdg = CommandDataGram::create_command_gram_from_gram(vecu8.as_mut(), reqcmdgram.as_ref());
 
         let mut stream = stm.lock().await;
-        // let mut bts = rescmdbuff.as_ref();
         let u8array = vecu8.as_mut();
         stream.write_all(u8array).await.expect("stream should be open");
-        // stream.write_all(u8array).await.expect("stream should be open");
         stream.flush().await.expect("stream should be open");
-        // stream.connection().close(u32::from(value));
+
+        stream.close().await.expect("close stream error!");
+        stream.connection().close(LOGOUT_CODE.into());
+        
+        let os = ccp.remove_client(reqcmdgram.sender().into(),reqcmdgram.deviceid());
+        if let Some(ostm) = os {
+          // 
+          if !Arc::ptr_eq(&stm, &ostm) {
+            let mut ostm = ostm.lock().await;
+            ostm.close().await.expect("close ostream error!");
+            ostm.connection().close(LOGOUT_CODE.into());
+          }
+        }
     // })
 } 
+const LOGOUT_CODE:u32 = 0x0009;

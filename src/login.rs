@@ -32,7 +32,7 @@ pub async fn process_command_login<'a>(stmid   :u64,
     // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
         // 缓存client的信息
-        ccp.put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stm.clone());
+        ccp.put_client(reqcmdgram.sender().into(),reqcmdgram.deviceid(), stm.clone());
         // 必须clone
         // ccp.put_stream(stmid, stm.clone());
 
