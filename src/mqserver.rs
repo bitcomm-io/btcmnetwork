@@ -28,7 +28,7 @@ pub async fn start_message_evnet_queue_server(cpm:Arc<tokio::sync::Mutex<ClientP
                 let receiver = reqmsggram.receiver();
                 let deviceid = reqmsggram.deviceid();
                 let ccp = cpm.lock().await;
-                // 如何能够获取hash
+                // 如果能够获取Vec,是登录的同一个服务器,则在服务器内部传递消息
                 if let Some(devvec) = ccp.get_device_pool(receiver.into()) {
                     // 循环处理每一个键值对(每一个设备，对应一个连接)
                     for &deviceid in devvec {

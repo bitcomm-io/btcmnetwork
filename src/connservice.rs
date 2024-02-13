@@ -7,6 +7,12 @@ use tokio::sync::Mutex;
 pub static _TIME_OUT_ :Duration = Duration::from_secs(120);
 
 #[derive(Debug)]
+pub struct DeviceInfo {
+    pub device_id       :u32,
+    pub device_type     :u32,
+    pub device_state    :u32,
+}
+#[derive(Debug)]
 pub struct ClientPoolManager {
     /// u128 = clientid + deviceid
     client_pool : HashMap<u128,(Arc<Mutex<SendStream>>,Instant)>, // clientid,deviceid,streamid
@@ -14,9 +20,9 @@ pub struct ClientPoolManager {
     // 
     // stream_pool : HashMap<u128,Arc<tokio::sync::Mutex<SendStream>>>, // streamid,stream
 }
-    fn get_key(clientid:u64,deviceid:u32) -> u128 {
-        (clientid as u128) << 64 | (deviceid as u128)
-    }
+fn get_key(clientid:u64,deviceid:u32) -> u128 {
+    (clientid as u128) << 64 | (deviceid as u128)
+}
 
 impl ClientPoolManager {
     // 
