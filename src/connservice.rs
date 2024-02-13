@@ -1,4 +1,5 @@
 use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
+use btcmbase::client::{DeviceConnInfo, DeviceConnState};
 use s2n_quic::stream::SendStream;
 use tokio::sync::Mutex;
 
@@ -7,16 +8,10 @@ use tokio::sync::Mutex;
 pub static _TIME_OUT_ :Duration = Duration::from_secs(120);
 
 #[derive(Debug)]
-pub struct DeviceInfo {
-    pub device_id       :u32,
-    pub device_type     :u32,
-    pub device_state    :u32,
-}
-#[derive(Debug)]
 pub struct ClientPoolManager {
     /// u128 = clientid + deviceid
     client_pool : HashMap<u128,(Arc<Mutex<SendStream>>,Instant)>, // clientid,deviceid,streamid
-    device_pool : HashMap<u64,Vec<u32>>,
+    device_pool : HashMap<u64,HashMap<u32,DeviceConnInfo>>,
     // 
     // stream_pool : HashMap<u128,Arc<tokio::sync::Mutex<SendStream>>>, // streamid,stream
 }
@@ -32,7 +27,7 @@ impl ClientPoolManager {
                           }
     }
     // 
-    pub fn get_device_pool(&self,clt:u64) -> Option<&Vec<u32>> {
+    pub fn get_device_pool(&self,clt:u64) -> Option<&HashMap<u32,DeviceConnInfo>> {
         self.device_pool.get(&clt)
     }
 
@@ -44,22 +39,34 @@ impl ClientPoolManager {
     pub fn remove_client(&mut self,clt:u64,dev:u32) -> Option<Arc<Mutex<SendStream>>> {
 
         if self.device_pool.contains_key(&clt) {
-            let array = self.device_pool.get_mut(&clt).unwrap();
-            array.retain(|&x| x != dev);
+            let hash = self.device_pool.get_mut(&clt).unwrap();
+            if hash.contains_key(&dev) {
+                let devinfo = hash.get_mut(&dev).unwrap();
+                // 将指定设备设置为离线状态
+                devinfo.set_device_state(DeviceConnState::STATE_OFFLINE);
+            }
+            // array.retain(|&x| x != dev);
         }
-
         // if self.client_pool.contains_key(&key) {
         self.client_pool.remove(&get_key(clt,dev)).map(|(v, _)| v)
         // } else {
             // Option::None
         // }
     }
+
+    pub fn set_device_state(&mut self,clt:u64,dev:u32,state:DeviceConnState) {
+        // 如果还不存在,则插入新的,将设备状态设为ONLINE
+        self.device_pool.entry(clt).or_insert(HashMap::new());
+        let hash = self.device_pool.get_mut(&clt).unwrap();
+        hash.entry(dev).or_insert(DeviceConnInfo::new(dev, state)); //{hash.push(dev);}
+        let dci = hash.get_mut(&dev).unwrap(); 
+        dci.set_device_state(state);
+    }
+
     //
     pub fn put_client(&mut self,clt:u64,dev:u32,stream:Arc<Mutex<SendStream>>) ->Option<Arc<Mutex<SendStream>>> {
-        // 如果还不存在,则插入新的
-        self.device_pool.entry(clt).or_insert(Vec::new());
-        let array = self.device_pool.get_mut(&clt).unwrap();
-        if !array.contains(&dev) {array.push(dev);}
+        // 如果还不存在,则插入新的,将设备状态设为ONLINE
+        self.set_device_state(clt,dev,DeviceConnState::STATE_ONLINE);
 
         let key = get_key(clt,dev);
         // 如果已经存在
