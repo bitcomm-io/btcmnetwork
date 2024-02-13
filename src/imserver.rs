@@ -143,6 +143,7 @@ fn handle_receive(datagram:Arc<InnerDataGram>) {
     }
 }
 
+//
 fn handle_command_data<'a>(reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>) {
     // 处理login命令
     if reqcmdgram.command().contains(BitCommand::LOGIN_COMMAND) {
@@ -168,13 +169,7 @@ fn handle_message_data(reqmsgbuff:&Arc<Bytes>,reqmsggram:&Arc<MessageDataGram>) 
     //                                                   Option::Some(vecu8)))
 }
 
-
-
-
-
-
-
-
+//
 #[allow(unused_variables)]
 async fn process_data<'a>(stmid   :u64,
                           data    :Arc<InnerDataGram>,
@@ -192,8 +187,7 @@ async fn process_data<'a>(stmid   :u64,
     }
     Result::Ok(data)
 }
-
-
+// 
 async fn process_command_data<'a>(stmid   :u64,
                                 reqcmdbuff:&Arc<Bytes>,reqcmdgram:&Arc<CommandDataGram>,
                                 cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
@@ -214,8 +208,6 @@ async fn process_message_data<'a>(stmid   :u64,
                         cpm     :Arc<tokio::sync::Mutex<ClientPoolManager>>,
                         stm     :Arc<tokio::sync::Mutex<SendStream>>,
                         meqsend :Arc<Mutex<Sender<MessageEvent>>>) {
-
     send::send_message(stmid, reqmsgbuff, reqmsggram, cpm, stm,meqsend).await;
-
 }
 

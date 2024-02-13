@@ -11,10 +11,10 @@ pub static _TIME_OUT_ :Duration = Duration::from_secs(120);
 pub struct ClientPoolManager {
     /// u128 = clientid + deviceid
     client_pool : HashMap<u128,(Arc<Mutex<SendStream>>,Instant)>, // clientid,deviceid,streamid
-    device_pool : HashMap<u64,HashMap<u32,DeviceConnInfo>>,
     // 
-    // stream_pool : HashMap<u128,Arc<tokio::sync::Mutex<SendStream>>>, // streamid,stream
+    device_pool : HashMap<u64,HashMap<u32,DeviceConnInfo>>,
 }
+//
 fn get_key(clientid:u64,deviceid:u32) -> u128 {
     (clientid as u128) << 64 | (deviceid as u128)
 }
@@ -36,32 +36,24 @@ impl ClientPoolManager {
         self.client_pool.get(&get_key(clt,dev)).map(|(v, _)| v)
     }
     //
-    pub fn remove_client(&mut self,clt:u64,dev:u32) -> Option<Arc<Mutex<SendStream>>> {
-
-        if self.device_pool.contains_key(&clt) {
-            let hash = self.device_pool.get_mut(&clt).unwrap();
-            if hash.contains_key(&dev) {
-                let devinfo = hash.get_mut(&dev).unwrap();
+    pub fn remove_client(&mut self, clt: u64, dev: u32) -> Option<Arc<Mutex<SendStream>>> {
+        if let Some(hash) = self.device_pool.get_mut(&clt) {
+            if let Some(devinfo) = hash.get_mut(&dev) {
                 // 将指定设备设置为离线状态
                 devinfo.set_device_state(DeviceConnState::STATE_OFFLINE);
             }
-            // array.retain(|&x| x != dev);
         }
-        // if self.client_pool.contains_key(&key) {
-        self.client_pool.remove(&get_key(clt,dev)).map(|(v, _)| v)
-        // } else {
-            // Option::None
-        // }
+        self.client_pool.remove(&get_key(clt, dev)).map(|(v, _)| v)
     }
-
-    pub fn set_device_state(&mut self,clt:u64,dev:u32,state:DeviceConnState) {
-        // 如果还不存在,则插入新的,将设备状态设为ONLINE
-        self.device_pool.entry(clt).or_insert(HashMap::new());
-        let hash = self.device_pool.get_mut(&clt).unwrap();
-        hash.entry(dev).or_insert(DeviceConnInfo::new(dev, state)); //{hash.push(dev);}
-        let dci = hash.get_mut(&dev).unwrap(); 
-        dci.set_device_state(state);
+    // 
+    pub fn set_device_state(&mut self, clt: u64, dev: u32, state: DeviceConnState) {
+        // 如果客户端不存在，则插入新的客户端，设备状态设置为在线
+        let hash = self.device_pool.entry(clt).or_insert_with(HashMap::new);
+        hash.entry(dev)
+            .or_insert_with(|| DeviceConnInfo::new(dev, state))
+            .set_device_state(state);
     }
+    
 
     //
     pub fn put_client(&mut self,clt:u64,dev:u32,stream:Arc<Mutex<SendStream>>) ->Option<Arc<Mutex<SendStream>>> {
@@ -76,16 +68,11 @@ impl ClientPoolManager {
         self.client_pool.insert(key, (stream, Instant::now() + _TIME_OUT_)).map(|(v, _)| v)
     }
     // 
-    pub fn update_client(&mut self,clt:u64,dev:u32) ->Option<&Instant> {
-        let key = get_key(clt,dev);
-        // 如果存在,则需要修改超时时间
-        if self.client_pool.contains_key(&key) {
-            if let Some( (_, instant)) = self.client_pool.get_mut(&key) {
-                *instant = Instant::now() + _TIME_OUT_; // 修改 Instant 值为当前时间
-                Some(instant)
-            } else {
-                None
-            }
+    pub fn update_client(&mut self, clt: u64, dev: u32) -> Option<&Instant> {
+        let key = get_key(clt, dev);
+        if let Some((_, instant)) = self.client_pool.get_mut(&key) {
+            *instant = Instant::now() + _TIME_OUT_; // 修改 Instant 值为当前时间加上超时时间
+            Some(instant)
         } else {
             None
         }
