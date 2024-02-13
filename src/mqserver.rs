@@ -20,7 +20,7 @@ pub async fn start_message_evnet_queue_server(
             MessageEvent::MessageReceive {
                 reqmsgbuff,
                 reqmsggram,
-            } => { 
+            } => {
                 let receiver = reqmsggram.receiver();
                 let ccp = cpm.lock().await;
                 // 如果能够获取Vec,是登录的同一个服务器,则在服务器内部传递消息
@@ -52,9 +52,7 @@ pub async fn start_message_evnet_queue_server(
     }
     Ok(())
 }
-// 
 fn send_request_offline() {}
-//
 fn send_request_onback() {}
 //
 async fn send_request_online(ccp: &ClientPoolManager, clt: u64, did: u32, reqmsgbuff: &Bytes) {
