@@ -30,15 +30,9 @@ pub async fn process_command_data<'a>(
     stm: Arc<tokio::sync::Mutex<SendStream>>,
 ) {
     match reqcmdgram.command() {
-        BitCommand::LOGIN_COMMAND => {
-            login::process_command_login(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await;
-        }
-        BitCommand::LOGOUT_COMMAND => {
-            logout::process_command_logout(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await;
-        }
-        BitCommand::SEND_PING => {
-            pingpong::process_command_pingpong(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await;
-        }
+        BitCommand::LOGIN_COMMAND   => login::process_command_login(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await,
+        BitCommand::LOGOUT_COMMAND  => logout::process_command_logout(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await,
+        BitCommand::SEND_PING       => pingpong::process_command_pingpong(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await,
         _ => {}
     }
 }
