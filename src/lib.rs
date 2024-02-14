@@ -6,6 +6,8 @@ pub mod eventqueue;
 pub mod mqserver;
 pub mod slowloris;
 pub mod wdserver;
+mod procommand;
+mod promessage;
 mod login;
 mod logout;
 mod send;
