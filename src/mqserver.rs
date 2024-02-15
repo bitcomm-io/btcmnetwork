@@ -1,27 +1,21 @@
 use btcmbase::client::DeviceConnState;
 use bytes::Bytes;
-use std::{error::Error, sync::Arc};
-use tokio::{
-    io::AsyncWriteExt,
-    sync::{mpsc::Receiver, Mutex},
-};
+use std::{ error::Error, sync::Arc };
+use tokio::{ io::AsyncWriteExt, sync::{ mpsc::Receiver, Mutex } };
 
-use crate::{connservice::ClientPoolManager, eventqueue::MessageEvent};
+use crate::{ connservice::ClientPoolManager, eventqueue::MessageEvent };
 
 pub async fn start_message_evnet_queue_server(
     cpm: Arc<tokio::sync::Mutex<ClientPoolManager>>,
-    meqrece0: Arc<Mutex<Receiver<MessageEvent>>>,
+    meqrece0: Arc<Mutex<Receiver<MessageEvent>>>
 ) -> Result<(), Box<dyn Error>> {
     let mut meqrece1 = meqrece0.lock().await;
     // 处理接收到的事件
     while let Some(event) = meqrece1.recv().await {
         match event {
             #[allow(unused_variables)]
-            MessageEvent::MessageReceive {
-                reqmsgbuff,
-                reqmsggram,
-            } => {
-                slog::info!(btcmtools::LOGGER,"MQ gram to event {:?}", reqmsggram);  
+            MessageEvent::MessageReceive { reqmsgbuff, reqmsggram } => {
+                slog::info!(btcmtools::LOGGER, "MQ gram to event {:?}", reqmsggram);
                 let receiver = reqmsggram.receiver();
                 let ccp = cpm.lock().await;
                 // 如果能够获取Vec,是登录的同一个服务器,则在服务器内部传递消息
@@ -42,11 +36,13 @@ pub async fn start_message_evnet_queue_server(
                                 // 在线
                                 send_request_online(&ccp, receiver.into(), *did, &reqmsgbuff).await;
                             }
-                            _ => { // 其他
+                            _ => {
+                                // 其他
                             }
                         }
                     }
-                } else { // 如果获取不到,说明不是登录的同一个服务器,或是处在离线状态,则需要通过nats进行消息传递
+                } else {
+                    // 如果获取不到,说明不是登录的同一个服务器,或是处在离线状态,则需要通过nats进行消息传递
                 }
             }
         }

@@ -5,11 +5,12 @@ use s2n_quic::{
     stream::{BidirectionalStream, SendStream},
     Server,
 };
+use tokio::sync::{ mpsc::Sender, Mutex };
 // use tokio::sync::{mpsc::Sender, Mutex};
 
 use std::sync::Arc;
 // use tokio::sync::Mutex;
-use crate::{connservice::ClientPoolManager, login, logout, pingpong};
+use crate::{connservice::ClientPoolManager, eventqueue::MessageEvent, login, logout, pingpong};
 
 //
 pub fn handle_command_data<'a>(reqcmdbuff: &Arc<Bytes>, reqcmdgram: &Arc<CommandDataGram>) {
@@ -20,14 +21,14 @@ pub fn handle_command_data<'a>(reqcmdbuff: &Arc<Bytes>, reqcmdgram: &Arc<Command
         logout::handle_command_logout(reqcmdbuff, reqcmdgram)
     }
 }
-
-//
+#[allow(unused_variables)]
 pub async fn process_command_data<'a>(
     stmid: u64,
     reqcmdbuff: &Arc<Bytes>,
     reqcmdgram: &Arc<CommandDataGram>,
     cpm: Arc<tokio::sync::Mutex<ClientPoolManager>>,
     stm: Arc<tokio::sync::Mutex<SendStream>>,
+    meqsend: Arc<Mutex<Sender<MessageEvent>>>
 ) {
     match reqcmdgram.command() {
         BitCommand::LOGIN_COMMAND   => login::process_command_login(stmid, reqcmdbuff, reqcmdgram, cpm, stm).await,
