@@ -26,7 +26,7 @@ pub async fn process_command_logout<'a>(stmid   :u64,
                                   stm     :Arc<tokio::sync::Mutex<SendStream>>) {
     // let command = data.req_cmdgram.unwrap();
     // 此方法中需要对 token 进行验证
-    eprintln!("client logout server {:?}", reqcmdgram);   
+    slog::info!(btcmtools::LOGGER,"client logout server {:?}", reqcmdgram);   
     // tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut ccp = cpm.lock().await;
 

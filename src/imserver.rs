@@ -15,6 +15,8 @@ use std::{error::Error, sync::Arc, time::Duration};
 use crate::{
     connservice::ClientPoolManager, eventqueue::MessageEvent, procommand, promessage, slowloris,
 };
+use btcmtools::LOGGER;
+use slog::info;
 
 // use std::future::Future;
 // use crate::slowloris::MyConnectionSupervisor;
@@ -45,7 +47,7 @@ fn get_server() -> Result<Server, Box<dyn Error>> {
         // .with_io("127.0.0.1:4433")?
         .with_io("0.0.0.0:9563")?
         .start()?;
-    println!("quic listening on {}", server.local_addr().unwrap());
+    info!(LOGGER,"quic listening on {}", server.local_addr().unwrap());
     Ok(server)
 }
 
@@ -65,7 +67,7 @@ pub async fn start_instant_message_server(
         let meqsend1 = meqsend0.clone();
         // 生成异步新的任务
         tokio::spawn(async move {
-            eprintln!("Connection accepted from {:?}", connection.remote_addr());
+            slog::info!(btcmtools::LOGGER,"Connection accepted from {:?}", connection.remote_addr());
             // 从连接中获取双向流
             #[allow(unused_mut)]
             // #[allow(unused_variables)]
@@ -100,11 +102,11 @@ pub async fn start_instant_message_server(
                             .expect("process data error");
                         } else {
                             let mut send_stream = stm0.lock().await;
-                            eprint!(
+                            slog::info!(btcmtools::LOGGER,
                                 "client host from {:?}",
                                 send_stream.connection().remote_addr()
                             );
-                            eprintln!("  data is  {:?}", rcreqbuff.as_ref());
+                            slog::info!(btcmtools::LOGGER,"  data is  {:?}", rcreqbuff.as_ref());
                             send_stream
                                 .send(Arc::try_unwrap(rcreqbuff).unwrap())
                                 .await

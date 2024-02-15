@@ -18,7 +18,7 @@ pub async fn send_message<'a>(stmid   :u64,
                                 meqsend :Arc<Mutex<Sender<MessageEvent>>>) ->Option<Arc<MessageDataGram>> {
     // 
     // eprintln!("client send message buf  to server {:?}", reqmsgbuff);  
-    // eprintln!("client send message gram to server {:?}", reqmsggram);  
+    slog::info!(btcmtools::LOGGER,"client send message gram to server {:?}", reqmsggram);  
     // 
     let mut ccp = cpm.lock().await;
     // 
