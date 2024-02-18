@@ -10,11 +10,7 @@ use tokio::sync::{ mpsc::Sender, Mutex };
 use std::{ error::Error, sync::Arc, time::Duration };
 // use tokio::sync::Mutex;
 use crate::{
-    connservice::ClientPoolManager,
-    eventqueue::MessageEvent,
-    procommand,
-    promessage,
-    slowloris,
+    connservice::ClientPoolManager, eventqueue::MessageEvent, procommand, promessage, propingpong, slowloris
 };
 use btcmtools::LOGGER;
 use slog::info;
@@ -53,6 +49,11 @@ fn get_server() -> Result<Server, Box<dyn Error>> {
     info!(LOGGER, "quic listening on {}", server.local_addr().unwrap());
     Ok(server)
 }
+
+
+
+
+
 // 开启即时消息服务器
 pub async fn start_instant_message_server(
     // 客户端池管理器的互斥锁
@@ -148,82 +149,13 @@ pub async fn start_instant_message_server(
 }
 
 
-
-// pub async fn start_instant_message_server(
-//     cpm0: Arc<tokio::sync::Mutex<ClientPoolManager>>,
-//     meqsend0: Arc<Mutex<Sender<MessageEvent>>>
-// ) -> Result<(), Box<dyn Error>> {
-//     // 获取服务器
-//     let mut server = get_server()?;
-//     // 等待客户端连接
-//     while let Some(mut connection) = server.accept().await {
-//         // 设置不超时
-//         connection.keep_alive(true)?;
-//         #[allow(unused_variables)]
-//         // 为连接生成新任务,在新任务中必须clone
-//         let cpm1 = cpm0.clone();
-//         let meqsend1 = meqsend0.clone();
-//         // 生成异步新的任务
-//         tokio::spawn(async move {
-//             slog::info!(
-//                 btcmtools::LOGGER,
-//                 "Connection accepted from {:?}",
-//                 connection.remote_addr()
-//             );
-//             // 从连接中获取双向流
-//             #[allow(unused_mut)]
-//             // #[allow(unused_variables)]
-//             while let Ok(Some(mut stream)) = connection.accept_bidirectional_stream().await {
-//                 let (mut receive_stream, mut send_stream) = stream.split();
-//                 // 在这里获取stream id,后期不用lock获取
-//                 let stmid = send_stream.id();
-//                 // 组装共享器
-//                 let stm0 = Arc::new(tokio::sync::Mutex::new(send_stream));
-//                 // clone ClientPoolManager
-//                 let cpm2 = cpm1.clone();
-//                 let meqsend2 = meqsend1.clone();
-//                 // 为流生成新异步新任务
-//                 tokio::spawn(async move {
-//                     // 获取收到数据的缓冲区
-//                     while let Ok(Some(reqbuff)) = receive_stream.receive().await {
-//                         let rcreqbuff = Arc::new(reqbuff);
-//                         // 将req,res两个数据区进行结构整理,形成内部报文结构
-//                         if let Some(mut inner_data_gram) = prepare_data_buffer(rcreqbuff.clone()) {
-//                             let rcdatagram = Arc::new(inner_data_gram);
-//                             // 将获取到的数据解包,生成信令报文或是消息报文,同步方式的预处理
-//                             handle_data(rcdatagram.clone());
-//                             // 异步方式的处理
-//                             process_data(
-//                                 stmid,
-//                                 rcdatagram.clone(),
-//                                 cpm2.clone(),
-//                                 stm0.clone(),
-//                                 meqsend2.clone()
-//                             ).await.expect("process data error");
-//                         } else {
-//                             let mut send_stream = stm0.lock().await;
-//                             slog::info!(
-//                                 btcmtools::LOGGER,
-//                                 "client host from {:?}",
-//                                 send_stream.connection().remote_addr()
-//                             );
-//                             slog::info!(
-//                                 btcmtools::LOGGER,
-//                                 "receive data is  {:?}",
-//                                 rcreqbuff.as_ref()
-//                             );
-//                             send_stream.send(Arc::try_unwrap(rcreqbuff).unwrap()).await.expect("");
-//                         }
-//                     }
-//                 });
-//             }
-//         });
-//     }
-//     Ok(())
-// }
-
 fn prepare_data_buffer(reqbuff: Arc<Bytes>) -> Option<InnerDataGram> {
     let bts = reqbuff.as_ref();
+
+    if CommandDataGram::is_bitcomm_flag(bts) {
+        let bitcomm_flag = CommandDataGram::get_bitcomm_flag_by_u8(bts);
+        return Some(InnerDataGram::Pingpong(Arc::new(*bitcomm_flag)));
+    }
 
     if CommandDataGram::is_command_from_bytes(bts) {
         let reqcmdgram = CommandDataGram::get_command_data_gram_by_u8(bts);
@@ -243,30 +175,6 @@ fn prepare_data_buffer(reqbuff: Arc<Bytes>) -> Option<InnerDataGram> {
     None
 }
 
-//
-// fn prepare_data_buffer(reqbuff: Arc<Bytes>) -> Option<InnerDataGram> {
-//     // 如果是命令报文
-//     if CommandDataGram::is_command_from_bytes(reqbuff.as_ref()) {
-//         let bts = reqbuff.as_ref();
-//         let reqcmdgram = CommandDataGram::get_command_data_gram_by_u8(bts.as_ref());
-//         let reqdata = InnerDataGram::Command {
-//             reqcmdbuff: reqbuff.clone(),
-//             reqcmdgram: Arc::new(*reqcmdgram),
-//         };
-//         Some(reqdata)
-//         // 如果是消息报文
-//     } else if MessageDataGram::is_message_from_bytes(reqbuff.as_ref()) {
-//         let reqmsggram = MessageDataGram::get_message_data_gram_by_u8(reqbuff.as_ref());
-//         let reqdata = InnerDataGram::Message {
-//             reqmsgbuff: reqbuff.clone(),
-//             reqmsggram: Arc::new(*reqmsggram),
-//         };
-//         Some(reqdata)
-//     } else {
-//         // 如果两种报文都不是
-//         Option::None
-//     }
-// }
 
 #[allow(unused_variables)]
 fn handle_data(datagram: Arc<InnerDataGram>) {
@@ -276,6 +184,9 @@ fn handle_data(datagram: Arc<InnerDataGram>) {
         }
         InnerDataGram::Message { reqmsgbuff, reqmsggram } => {
             promessage::handle_message_data(reqmsgbuff, reqmsggram);
+        }
+        InnerDataGram::Pingpong( pingpong) => {
+
         }
     }
 }
@@ -309,6 +220,16 @@ async fn process_data<'a>(
                 stm,
                 meqsend
             ).await,
+
+        InnerDataGram::Pingpong( pingpong) => 
+            propingpong::process_bitcomm_flag_data(
+                stmid, 
+                pingpong, 
+                cpm, 
+                stm, 
+                meqsend
+            ).await
+
     }
     Result::Ok(data)
 }

@@ -8,6 +8,7 @@ pub mod slowloris;
 pub mod wdserver;
 mod procommand;
 mod promessage;
+mod propingpong;
 mod login;
 mod logout;
 mod send;
