@@ -2,39 +2,68 @@ use std::sync::Arc;
 
 use btcmbase::datagram::MessageDataGram;
 use bytes::Bytes;
-// use btcmbase::datagram::InnerDataGram;
-// use getset::{Getters, Setters};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc::{self, Receiver, Sender}, Mutex};
 
-
-
+/// 默认事件队列长度。
 #[warn(dead_code)]
 pub static EVENT_QUEUE_LEN: usize = 1024;
 
-// 定义事件类型
+/// 事件类型枚举。
 #[warn(dead_code)]
 pub enum MessageEvent {
-    MessageReceive {reqmsgbuff:Arc<Bytes>,reqmsggram:Arc<MessageDataGram>} 
+    MessageReceive {
+        reqmsgbuff: Arc<Bytes>,
+        reqmsggram: Arc<MessageDataGram>,
+    },
+    GroupReceive {
+        reqmsgbuff: Arc<Bytes>,
+        reqmsggram: Arc<MessageDataGram>,
+    },
+    ServiceReceive {
+        reqmsgbuff: Arc<Bytes>,
+        reqmsggram: Arc<MessageDataGram>,
+    },
+    DeviceReceive {
+        reqmsgbuff: Arc<Bytes>,
+        reqmsggram: Arc<MessageDataGram>,
+    },
+    RobotReceive {
+        reqmsgbuff: Arc<Bytes>,
+        reqmsggram: Arc<MessageDataGram>,
+    },
 }
+
+/// 消息事件队列结构。
 #[allow(dead_code)]
-#[derive(Debug)]//Getters, Setters)]
+#[derive(Debug)] //Getters, Setters)]
 pub struct MessageEventQueue {
-    // 发送端
-    // #[getset(set = "pub", get = "pub")]
-    pub sender   : mpsc::Sender<MessageEvent>,   // 发送端
-    // 接收端
-    // #[getset(set = "pub", get = "pub")]
-    pub receiver : mpsc::Receiver<MessageEvent>, // 接收端
+    // // 发送端
+    // // #[getset(set = "pub", get = "pub")]
+    // pub sender: Arc<Mutex<mpsc::Sender<MessageEvent>>>, // 发送端
+    // // 接收端
+    // // #[getset(set = "pub", get = "pub")]
+    // pub receiver: Arc<Mutex<mpsc::Receiver<MessageEvent>>>, // 接收端
 }
 
-#[warn(dead_code)]
-impl MessageEventQueue {
-    // 
-    pub fn new() -> Self {
-        // 创建一个 mpsc::channel，消息类型为MessageEvent
+use lazy_static::lazy_static;
+lazy_static! {  
+    /// 全局消息通道元组,用于处理客户端发送来的所有消息
+    static ref MESSAGE_CHANNEL : (Arc<Mutex<Sender<MessageEvent>>>, Arc<Mutex<Receiver<MessageEvent>>>) =  {
         let (sender, receiver) = mpsc::channel::<MessageEvent>(EVENT_QUEUE_LEN);
-        // 返回一个新的结构体实例
-        Self { sender, receiver }    
-    }
-
+        (Arc::new(Mutex::new(sender)), Arc::new(Mutex::new(receiver)) )
+    };
 }
+
+impl MessageEventQueue {
+    /// 获取消息发送端。
+    pub fn get_sender(
+    ) -> Arc<Mutex<Sender<MessageEvent>>> {
+        MESSAGE_CHANNEL.0.clone()
+    }
+    /// 获取消息接收端。
+    pub fn get_receiver(
+    ) -> Arc<Mutex<Receiver<MessageEvent>>> {
+        MESSAGE_CHANNEL.1.clone()
+    }
+}
+

@@ -1,60 +1,68 @@
-use btcmbase::client::DeviceConnState;
-use bytes::Bytes;
-use std::{ error::Error, sync::Arc };
-use tokio::{ io::AsyncWriteExt, sync::{ mpsc::Receiver, Mutex } };
+use std::error::Error;
 
-use crate::{ connservice::ClientPoolManager, eventqueue::MessageEvent };
+use crate::{
+    eventqueue::{MessageEvent, MessageEventQueue},
+    group::grpmessage,
+    sendtoclient,
+};
 
-pub async fn start_message_evnet_queue_server(
-    cpm: Arc<tokio::sync::Mutex<ClientPoolManager>>,
-    meqrece0: Arc<Mutex<Receiver<MessageEvent>>>
-) -> Result<(), Box<dyn Error>> {
-    let mut meqrece1 = meqrece0.lock().await;
-    // 处理接收到的事件
-    while let Some(event) = meqrece1.recv().await {
+/// 启动消息事件队列服务器。
+/// 
+/// 该函数从消息事件队列中获取事件并处理，根据事件类型分发到相应的处理函数中。
+/// 
+/// # 返回
+/// 如果启动成功，则返回 `Ok(())`，否则返回包含错误信息的 `Result`。
+#[allow(unused_variables)]
+pub async fn start_message_event_queue_server() -> Result<(), Box<dyn Error>> {
+    // 获取消息事件队列的接收端
+    let receiver = MessageEventQueue::get_receiver();
+    let mut meqrece = receiver.lock().await;
+    while let Some(event) = meqrece.recv().await {
         match event {
-            #[allow(unused_variables)]
+            // 处理消息接收事件
             MessageEvent::MessageReceive { reqmsgbuff, reqmsggram } => {
-                slog::info!(btcmtools::LOGGER, "MQ gram to event {:?}", reqmsggram);
-                let receiver = reqmsggram.receiver();
-                let ccp = cpm.lock().await;
-                // 如果能够获取Vec,是登录的同一个服务器,则在服务器内部传递消息
-                if let Some(devhash) = ccp.get_device_pool(receiver.into()) {
-                    // 循环处理每一个键值对(每一个设备，对应一个连接)
-                    for (did, dci) in devhash {
-                        //
-                        match dci.device_state() {
-                            DeviceConnState::STATE_OFFLINE => {
-                                // 离线
-                                send_request_offline();
-                            }
-                            DeviceConnState::STATE_ONBACK => {
-                                // 后台
-                                send_request_onback();
-                            }
-                            DeviceConnState::STATE_ONLINE => {
-                                // 在线
-                                send_request_online(&ccp, receiver.into(), *did, &reqmsgbuff).await;
-                            }
-                            _ => {
-                                // 其他
-                            }
-                        }
-                    }
-                } else {
-                    // 如果获取不到,说明不是登录的同一个服务器,或是处在离线状态,则需要通过nats进行消息传递
-                }
+                sendtoclient::send_message_to_client(&reqmsgbuff, &reqmsggram).await;
             }
+            // 处理群组消息接收事件
+            MessageEvent::GroupReceive { reqmsgbuff, reqmsggram } => {
+                grpmessage::send_group_message_to_all(&reqmsgbuff, &reqmsggram).await;
+            }
+            // 处理服务消息接收事件
+            MessageEvent::ServiceReceive { reqmsgbuff, reqmsggram } => {
+                // 可根据需要添加处理逻辑
+            }
+            _ => {} // 忽略其他类型的事件
         }
     }
     Ok(())
 }
-fn send_request_offline() {}
-fn send_request_onback() {}
-//
-async fn send_request_online(ccp: &ClientPoolManager, clt: u64, did: u32, reqmsgbuff: &Bytes) {
-    let value = ccp.get_client(clt, did).unwrap();
-    let mut stream = value.lock().await;
-    stream.write_all(reqmsgbuff).await.expect("send to error!");
-    stream.flush().await.expect("flush error");
-}
+
+// use std:: error::Error ;
+
+// use crate::{
+//     eventqueue::{MessageEvent, MessageEventQueue},
+//     group::grpmessage,
+//     sendtoclient,
+// };
+
+// #[allow(unused_variables)]
+// pub async fn start_message_event_queue_server() -> Result<(), Box<dyn Error>> {
+//     let receiver = MessageEventQueue::get_receiver();
+//     let mut meqrece = receiver.lock().await;//MESSAGE_CHANNEL.1.lock().await;
+//     while let Some(event) = meqrece.recv().await {
+//         match event {
+//             MessageEvent::MessageReceive { reqmsgbuff, reqmsggram } => {
+//                 sendtoclient::send_message_to_client( &reqmsgbuff, &reqmsggram).await;
+//             }
+//             MessageEvent::GroupReceive { reqmsgbuff, reqmsggram } => {
+//                 // 处理 GroupReceive 事件
+//                 grpmessage::send_group_message_to_all( &reqmsgbuff, &reqmsggram).await;
+//             }
+//             MessageEvent::ServiceReceive { reqmsgbuff, reqmsggram } => {
+//                 // 处理 ServiceReceive 事件
+//             }
+//             _ => {}
+//         }
+//     }
+//     Ok(())
+// }
