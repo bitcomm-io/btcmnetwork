@@ -4,13 +4,14 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 use crate::connservice::ClientPoolManager;
-
+use tracing::info;
+// use tracing::error;
 
 pub async fn send_message_to_client(
     reqmsgbuff: &Arc<Bytes>,
     reqmsggram: &Arc<MessageDataGram>
 ) {
-    slog::info!(btcmtools::LOGGER, "MQ gram to event {:?}", reqmsggram);
+    info!("MQ gram to event {:?}", reqmsggram);
     let receiver = reqmsggram.receiver();
     // let ccp = cpm.lock().await;
     // 如果能够获取Vec,是登录的同一个服务器,则在服务器内部传递消息

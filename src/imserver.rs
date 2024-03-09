@@ -17,8 +17,9 @@ use crate::{
     propingpong,
     slowloris,
 };
-use btcmtools::LOGGER;
-use slog::info;
+use tracing::info;
+use tracing::error;
+
 
 pub static BITCOMM_IMSERVER     :&str = "0.0.0.0";
 pub static BITCOMM_IMSERVER_PORT:&str = "1130"; 
@@ -59,7 +60,7 @@ fn get_server() -> Result<Server, Box<dyn Error>> {
         // .with_io("127.0.0.1:4433")?
         .with_io(server_address.as_str())?
         .start()?;
-    info!(LOGGER, "quic listening on {}", server.local_addr().unwrap());
+    info!( "quic listening on {}", server.local_addr().unwrap());
     Ok(server)
 }
 
@@ -97,8 +98,7 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
         // 异步处理连接
         tokio::spawn(async move {
             // 记录连接接受日志
-            slog::info!(
-                btcmtools::LOGGER,
+            info!(
                 "Connection accepted from {:?}",
                 connection.remote_addr()
             );
@@ -121,19 +121,17 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                             handle_data(rcdatagram.clone());
                             // 异步处理数据
                             if let Err(err) = process_data(rcdatagram.clone(), stm0.clone()).await {
-                                slog::error!(btcmtools::LOGGER, "process data error: {}", err);
+                                error!( "process data error: {}", err);
                             }
                         } else {
                             // 获取发送流的互斥锁并发送数据
                             let mut send_stream = stm0.lock().await;
                             // 记录客户端主机信息和接收到的数据
-                            slog::info!(
-                                btcmtools::LOGGER,
+                            info!(
                                 "client host from {:?}",
                                 send_stream.connection().remote_addr()
                             );
-                            slog::info!(
-                                btcmtools::LOGGER,
+                            info!(
                                 "receive data is  {:?}",
                                 rcreqbuff.as_ref()
                             );
@@ -143,7 +141,7 @@ pub async fn start_instant_message_server() -> Result<(), Box<dyn Error>> {
                                     Arc::try_unwrap(rcreqbuff).unwrap()
                                 ).await
                             {
-                                slog::error!(btcmtools::LOGGER, "send error: {}", err);
+                                error!("send error: {}", err);
                             }
                         }
                     }

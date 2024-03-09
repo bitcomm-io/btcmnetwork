@@ -10,6 +10,9 @@ use tokio::io::AsyncWriteExt;
 
 use crate::connservice::ClientPoolManager;
 
+use tracing::info;
+use tracing::error;
+
 /// 处理命令登录请求。
 /// 
 /// # 参数
@@ -32,7 +35,7 @@ pub async fn process_command_login<'a>(
     stm: Arc<tokio::sync::Mutex<SendStream>>
 ) {
     // 记录日志
-    slog::info!(btcmtools::LOGGER, "client login server {:?}", reqcmdgram);
+    info!( "client login server {:?}", reqcmdgram);
     
     let mut stream = stm.lock().await;
     
@@ -41,11 +44,11 @@ pub async fn process_command_login<'a>(
     let cdg = CommandDataGram::create_command_gram_from_gram(vecu8.as_mut(), reqcmdgram.as_ref());
     let u8array = vecu8.as_mut();
     if let Err(err) = stream.write_all(u8array).await {
-        slog::error!(btcmtools::LOGGER, "failed to write data to stream: {}", err);
+        error!("failed to write data to stream: {}", err);
         // return;
     }
     if let Err(err) = stream.flush().await {
-        slog::error!(btcmtools::LOGGER, "failed to flush stream: {}", err);
+        error!("failed to flush stream: {}", err);
         // return;
     }
 

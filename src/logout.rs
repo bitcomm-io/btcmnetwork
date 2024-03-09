@@ -6,7 +6,8 @@ use bytes::Bytes;
 use s2n_quic::stream::SendStream;
 #[allow(unused_imports)]
 use tokio::io::AsyncWriteExt;
-
+use tracing::info;
+// use tracing::error;
 use crate::connservice::ClientPoolManager;
 
 /// 处理命令登出请求。
@@ -32,7 +33,7 @@ pub async fn process_command_logout<'a>(
     stm: Arc<tokio::sync::Mutex<SendStream>>
 ) {
     // 记录日志
-    slog::info!(btcmtools::LOGGER, "client logout server {:?}", reqcmdgram);
+    info!("client logout server {:?}", reqcmdgram);
 
     // 创建命令数据报
     let mut vecu8 = CommandDataGram::create_gram_buf(0);

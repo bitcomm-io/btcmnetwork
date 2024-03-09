@@ -3,7 +3,8 @@ use btcmbase::datagram::CommandDataGram;
 use bytes::Bytes;
 use s2n_quic::stream::SendStream;
 use tokio::io::AsyncWriteExt;
-
+use tracing::info;
+// use tracing::error;
 use crate::connservice::ClientPoolManager;
 
 /// 异步处理命令 pingpong
@@ -39,7 +40,7 @@ pub async fn process_command_pingpong(
     stm: Arc<tokio::sync::Mutex<SendStream>>
 ) {
     // 记录日志
-    slog::info!(btcmtools::LOGGER, "processing command pingpong: {:?}", reqcmdgram);
+    info!( "processing command pingpong: {:?}", reqcmdgram);
 
     // 缓存客户端信息
     ClientPoolManager::put_client(reqcmdgram.sender().into(), reqcmdgram.deviceid(), stm.clone()).await;

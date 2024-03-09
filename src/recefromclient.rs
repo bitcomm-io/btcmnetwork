@@ -5,7 +5,8 @@ use bytes::Bytes;
 use s2n_quic::stream::SendStream;
 use tokio::{ io::AsyncWriteExt, sync::Mutex };
 use crate::{ connservice::ClientPoolManager, eventqueue::{ MessageEvent, MessageEventQueue } };
-
+use tracing::info;
+// use tracing::error;
 #[allow(unused_variables)]
 // #[allow(dead_code)]
 pub async fn rece_message_from_client(
@@ -15,7 +16,7 @@ pub async fn rece_message_from_client(
 ) -> Option<Arc<MessageDataGram>> {
     //
     // eprintln!("client send message buf  to server {:?}", reqmsgbuff);
-    slog::info!(btcmtools::LOGGER, "client send message gram to server {:?}", reqmsggram);
+    info!("client send message gram to server {:?}", reqmsggram);
     //
     // let mut ccp = cpm.lock().await;
     //
