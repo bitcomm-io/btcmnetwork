@@ -26,12 +26,12 @@ pub async fn rece_message_from_client(
     if let Some(ostm) = ClientPoolManager::get_client(clt, dev).await {
         // 并且pool里的和传递过来的是同一个stream
         if Arc::ptr_eq(&ostm, &stm) {
-            // 回复已送达信息
+            // 更新client的超时信息
+            ClientPoolManager::update_client(clt, dev).await;
+            // 回复已发送信息
             send_message_receipt(reqmsggram, stm).await;
             // 将消息发送到事件队列中
             send_message_to_queue(reqmsgbuff, reqmsggram).await;
-            // 更新client的超时信息
-            ClientPoolManager::update_client(clt, dev).await;
         } else {
             // 出错,返回出错的回执信息(两个连接不一致)
             send_message_twosession_nosame(reqmsggram, stm).await;
